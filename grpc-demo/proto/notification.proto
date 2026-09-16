@@ -29,3 +29,54 @@ message Notification {
 message GetNotificationsResponse {
   repeated Notification notifications = 1;
 }
+
+
+// ============================================================================
+// NOTES — notification.proto
+// ============================================================================
+//
+// WHAT THIS FILE IS
+//   The contract for notification-service, which owns notifications: nothing
+//   else in the system stores or reads them.
+//
+//   The service speaks gRPC and nothing else — it has no HTTP port, because no
+//   browser or human ever calls it directly. user-service generates its client
+//   from this file, and so would any future caller such as an order-service.
+//   That is the argument for it being a separate service at all: order-service
+//   would dial notification-service:9090 directly, with user-service neither
+//   involved nor aware.
+//
+// REGENERATE AFTER EVERY EDIT
+//   From grpc-demo/:
+//
+//     protoc --proto_path=proto \
+//       --go_out=proto/notifpb      --go_opt=paths=source_relative \
+//       --go-grpc_out=proto/notifpb --go-grpc_opt=paths=source_relative \
+//       notification.proto
+//
+// message Notification
+//   Messages may reference other messages freely — that nesting is how
+//   anything non-flat gets modelled. Here Notification is used as the element
+//   type of the list in GetNotificationsResponse.
+//
+// repeated
+//   A list. `repeated Notification notifications = 1` becomes
+//   []*Notification in Go, and a JSON array on the way back out through
+//   user-service's HTTP layer.
+//
+// WHY THE LIST IS WRAPPED IN A MESSAGE
+//   An rpc must return a single message, so the list cannot be returned bare.
+//   That constraint turns out to be a gift: when pagination is needed,
+//   total_count and next_page_token already have somewhere to live, and adding
+//   them breaks no existing caller.
+//
+// FIELD NUMBERS AND PROTO3 SEMANTICS
+//   Same rules as user.proto — the number is the field's identity on the wire,
+//   renaming is safe, renumbering is breaking, and reusing a deleted number
+//   corrupts data silently. See the NOTES block in user.proto for the full
+//   explanation; it is not repeated here.
+//
+// SEE ALSO
+//   user.proto             the other half of this system
+//   ../README.md Part 3    the same material at more length
+// ============================================================================

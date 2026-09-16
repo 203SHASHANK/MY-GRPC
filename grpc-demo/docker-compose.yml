@@ -1,12 +1,38 @@
+# Local orchestrator — not a service.
+#
+# It builds both images, puts them on one virtual network, injects
+# configuration, and orders startup. In production this role is played by
+# Kubernetes or ECS; nothing here is deployed.
+#
+#   docker compose up --build
+
 version: "3.9"
 
 services:
   notification-service:
     build:
+      # Context is the repo root, not the service folder, because both
+      # Dockerfiles need the shared proto/ module that go.mod's `replace`
+      # directive points at. See the comments in either Dockerfile.
       context: .
       dockerfile: notification-service/Dockerfile
+
+    # `expose` rather than `ports`: 9090 is reachable from other containers on
+    # this network and NOT from your machine. Try `curl localhost:9090` — it is
+    # refused. The network topology enforces the architecture: this service is
+    # internal by design, and only user-service should ever reach it.
     expose:
       - "9090"
+
+    # Readiness probe, not just liveness. Plain `depends_on` waits for the
+    # container to START, which says nothing about whether the process inside is
+    # accepting connections. This actually opens port 9090 before declaring the
+    # service healthy.
+    #
+    # gRPC's lazy connections mean user-service would survive without this — it
+    # would fail a call or two and reconnect. It is here because deterministic
+    # startup makes the log output reproducible while learning. Production wants
+    # both: ordered startup AND clients that tolerate a dependency restarting.
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 9090 || exit 1"]
       interval: 10s
@@ -17,11 +43,26 @@ services:
     build:
       context: .
       dockerfile: user-service/Dockerfile
+
+    # `ports` publishes to the host — this is the only service you curl.
+    # 8080 is HTTP, 50051 is its gRPC endpoint (unused by this demo, exposed so
+    # you can experiment with a gRPC client such as grpcurl).
     ports:
       - "8080:8080"
       - "50051:50051"
+
+    # Configuration through the environment, read by os.Getenv in main.go. The
+    # image never changes between environments; only this value does.
+    #
+    # "notification-service" is a DNS name, not a hostname anyone configured:
+    # Compose registers every service name in the network's internal DNS, so
+    # containers find each other by name and keep working after a restart gives
+    # them a new IP. No IP addresses appear anywhere in this project.
     environment:
       - NOTIFICATION_SERVICE_ADDR=notification-service:9090
+
+    # Wait for the healthcheck above to pass, not merely for the container to
+    # exist.
     depends_on:
       notification-service:
         condition: service_healthy

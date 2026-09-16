@@ -26,3 +26,83 @@ message GetUserResponse {
   string name    = 2;
   string email   = 3;
 }
+
+
+// ============================================================================
+// NOTES — user.proto
+// ============================================================================
+//
+// WHAT THIS FILE IS
+//   The contract for user-service: the source of truth for everything it
+//   exposes over gRPC. The server and every caller generate their code from
+//   this one file, so the two sides cannot drift apart.
+//
+//   It lives in proto/ rather than inside user-service/ because a contract is
+//   owned equally by both sides of a call. Putting it inside the service would
+//   imply that one side may change it unilaterally — it may not, because
+//   changing it breaks the caller.
+//
+// REGENERATE AFTER EVERY EDIT
+//   Nothing regenerates automatically. From grpc-demo/:
+//
+//     protoc --proto_path=proto \
+//       --go_out=proto/userpb      --go_opt=paths=source_relative \
+//       --go-grpc_out=proto/userpb --go-grpc_opt=paths=source_relative \
+//       user.proto
+//
+// option go_package
+//   The Go import path stamped into the generated files. Get it wrong and
+//   services either cannot import the generated code, or end up with two
+//   incompatible copies of the same types under different paths.
+//
+// service UserService
+//   A named group of callable methods — an interface declaration that happens
+//   to work across machines. Generates a matched pair of Go interfaces:
+//   UserServiceClient for callers, UserServiceServer for the implementation.
+//
+// WHY EVERY RPC HAS ITS OWN REQUEST AND RESPONSE TYPE
+//   An rpc takes exactly one message and returns exactly one message. Always.
+//   Three parameters means three fields in the request message.
+//
+//   That feels like overkill for GetUserRequest, which holds a single string.
+//   It pays off later: adding a field next year is a non-breaking change that
+//   needs no signature change and breaks no existing caller.
+//
+// FIELD NUMBERS (= 1, = 2, = 3)
+//   These are field IDs. They are not values and not defaults.
+//
+//   Protobuf puts the NUMBER on the wire, never the field name. That is the
+//   main reason Protobuf is smaller than JSON, which repeats every key as text
+//   in every message. The rule to remember:
+//
+//       the number is the field's identity; the name is only for humans
+//
+//   Consequences:
+//     - rename a field, keep its number    -> SAFE. Wire format is unchanged;
+//                                             old and new code interoperate.
+//     - keep the name, change the number   -> BREAKING. Every existing caller
+//                                             silently reads an empty value.
+//     - reuse a deleted field's number     -> SILENT DATA CORRUPTION. Old
+//                                             clients decode the new field into
+//                                             the old one. Mark removed numbers
+//                                             `reserved` instead.
+//
+//   Note that the dangerous cases fail quietly. Nothing crashes; fields just
+//   arrive empty forever. This is what `buf breaking` catches in CI.
+//
+// PROTO3 HAS NO NULL
+//   A scalar that was never set and a scalar explicitly set to its zero value
+//   are indistinguishable on the wire — an empty string is simply not
+//   transmitted, and the receiver sees "". So this is not expressible with a
+//   plain string field:
+//
+//       "the caller omitted email"  vs  "the caller sent an empty email"
+//
+//   If you need that distinction (typically for PATCH-style updates), use
+//   `optional` or a wrapper type. Either way, required-input validation is
+//   something the handler must do; the contract will not do it for you.
+//
+// SEE ALSO
+//   notification.proto     the other half of this system
+//   ../README.md Part 3    the same material at more length
+// ============================================================================
