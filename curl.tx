@@ -1,0 +1,22 @@
+Create users (each one triggers an internal gRPC call to notification-service):
+
+curl -s -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Shashank", "email": "shashank@example.com"}' | jq
+
+curl -s -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Priya", "email": "priya@example.com"}' | jq
+
+
+Get a user:
+
+curl -s http://localhost:8080/users/user-1 | jq
+
+Get notifications (proves the internal gRPC call from user-service → notification-service worked):
+
+curl -s http://localhost:8080/notifications/user-1 | jq
+
+Copy
+bash
+The jq at the end is optional — just pretty-prints the JSON. Remove it if you don't have jq installed.
